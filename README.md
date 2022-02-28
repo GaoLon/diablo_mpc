@@ -2,7 +2,7 @@
 
 ## a MPC for diablo configuration(see as differential car)
 
-if you want to use the code, you should install OSQP first, and can following steps:
+if you want to use the code, you should install `OSQP` and`serial` first, and can following steps:
 
 ```
 cd test_mpc
