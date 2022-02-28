@@ -1,0 +1,21 @@
+<launch>
+     <node name="serial_node"  pkg="serial"  type="serial_node" output="screen">
+        <param name="port"                      type="str"    value="/dev/ttyUSB0"/>
+        <param name="baudrate"                  type="int"    value="460800"/>
+        <param name="max_len"                   type="int"    value="30"/>
+        <param name="timeout"                   type="double" value="0.3"/>
+
+        <param name="use_sync"                  type="bool"   value="false"/>
+        <param name="use_hard_timestamp"        type="bool"   value="false"/>
+        <param name="soft_timestamp_dt"         type="double" value="0"/>
+
+        <param name="master/use_armor"          type="bool"   value="false"/>
+        <param name="master/use_rune"           type="bool"   value="false"/>
+
+        <param name="control/VS_kp_Pitch"       type="double" value="18"/>
+        <param name="control/VS_kd_Pitch"       type="double" value="0.6"/>
+        <param name="control/VS_kp_Yaw"         type="double" value="18"/>
+        <param name="control/VS_kd_Yaw"         type="double" value="0.6"/>
+        <param name="control/VS_sd"             type="double" value="0.5"/>
+    </node>
+</launch>
