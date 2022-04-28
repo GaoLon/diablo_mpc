@@ -80,7 +80,7 @@ void MPC::cmdCallback(const ros::TimerEvent &e)
 
     // for test
     t_cur = get_nearest();
-    ROS_INFO("state: x=%f, y=%f, v=%f, theta=%f", now_state.x, now_state.y, now_state.v, now_state.theta);
+    // ROS_INFO("state: x=%f, y=%f, v=%f, theta=%f", now_state.x, now_state.y, now_state.v, now_state.theta);
 
     if (t_cur == traj_duration_ && (csp.get_state(t_cur).head(2) - Eigen::Vector2d(now_state.x, now_state.y)).norm() < tolerance)
     {
@@ -467,7 +467,7 @@ void MPC::solveMPCA(void)
 
     // get the controller input
     QPSolution = solver.getSolution();
-    ROS_INFO("Solution: a0=%f     omega0=%f", QPSolution[dimx], QPSolution[dimx+1]);
+    // ROS_INFO("Solution: a0=%f     omega0=%f", QPSolution[dimx], QPSolution[dimx+1]);
     for (int i=0; i<dimu; i+=2)
     {
         output(0, i) = QPSolution[dimx+i];
@@ -693,7 +693,7 @@ void MPC::solveMPCV(void)
 
     // get the controller input
     QPSolution = solver.getSolution();
-    ROS_INFO("Solution: v0=%f     omega0=%f", QPSolution[dimx], QPSolution[dimx+1]);
+    // ROS_INFO("Solution: v0=%f     omega0=%f", QPSolution[dimx], QPSolution[dimx+1]);
     for (int i=0; i<dimu; i+=2)
     {
         output(0, i) = QPSolution[dimx+i];
@@ -726,7 +726,7 @@ void MPC::getCmd(void)
     }
     if (iter == max_iter)
     {
-        ROS_WARN("MPC Iterative is max iter");
+        // ROS_WARN("MPC Iterative is max iter");
     }
 
     if (control_a)

@@ -2,7 +2,7 @@
 
   <arg name="odom_topic" value="car/odom" />
   <arg name="command_topic" value="car/ackermann_cmd" />
-  <arg name="control_a" value="true" />
+  <arg name="control_a" value="false" />
 
   <node pkg="mpc" name="mpc" type="mpc" output="screen">
     <remap from="~position_cmd" to="$(arg command_topic)"/>
