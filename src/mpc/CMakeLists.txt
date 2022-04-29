@@ -19,8 +19,18 @@ find_package(Eigen3 REQUIRED)
 # find_package(osqp REQUIRED)
 find_package(OsqpEigen REQUIRED)
 
+add_message_files(FILES
+  Polynome.msg
+)
+
+generate_messages(DEPENDENCIES
+	std_msgs
+  geometry_msgs
+)
+
 catkin_package(
  CATKIN_DEPENDS roscpp std_msgs diablo_sdk
+ message_runtime
 #  DEPENDS system_lib
 )
 
@@ -33,8 +43,8 @@ include_directories(
 )
 
 add_executable (mpc src/mpc.cpp src/cubic_spline_planner.cpp)
+add_dependencies(mpc mpc_gencpp)
 target_link_libraries(mpc
-    # PRIVATE osqp::osqp
     OsqpEigen::OsqpEigen
     ${catkin_LIBRARIES}
     )

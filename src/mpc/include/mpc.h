@@ -17,17 +17,10 @@
 #include "cubic_spline_planner.h"
 #include "diablo_sdk/Diablo_Ctrl.h"
 
+#include "mpc_utils/traj_anal.hpp"
+
 using namespace std;
 using namespace Eigen;
-
-class MPCState
-{
-public:
-    double x = 0;
-    double y = 0;
-    double v = 0; 
-    double theta = 0;
-};
 
 class MPC
 {
@@ -68,16 +61,17 @@ private:
     double t_track = 0.0;
     ros::Time start_time_;
     MPCState now_state;
+    TrajAnalyzer traj_analyzer;
 
     // ros interface
 	ros::NodeHandle node_;
     ros::Timer cmd_timer_;
     ros::Publisher pos_cmd_pub_, vis_pub, fake_odom_pub;
-    ros::Subscriber odom_sub_, trajectory_sub_;
+    ros::Subscriber odom_sub_, traj_sub_;
     diablo_sdk::Diablo_Ctrl cmd;
     void cmdCallback(const ros::TimerEvent &e);
     void rcvOdomCallBack(nav_msgs::OdometryPtr msg);
-    // void rcvTrajCallBack(... msg);
+    void rcvTrajCallBack(mpc::PolynomeConstPtr msg);
 
     // for test tracking performance
     bool in_test;

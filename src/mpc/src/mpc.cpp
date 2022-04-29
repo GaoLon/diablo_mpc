@@ -35,6 +35,7 @@ void MPC::init(ros::NodeHandle &nh)
     fake_odom_pub = nh.advertise<nav_msgs::Odometry>("odometry", 1);
     cmd_timer_ = nh.createTimer(ros::Duration(dt), &MPC::cmdCallback, this);
     odom_sub_ = nh.subscribe("odom_world", 1, &MPC::rcvOdomCallBack, this);
+    traj_sub_ = nh.subscribe("trajectory", 1, &MPC::rcvTrajCallBack, this);
 
     if (in_test)
     {
@@ -44,6 +45,12 @@ void MPC::init(ros::NodeHandle &nh)
         t_track = 0.0;
         receive_traj_ = true;
     }
+}
+
+void MPC::rcvTrajCallBack(mpc::PolynomeConstPtr msg)
+{
+    receive_traj_ = true;
+    traj_analyzer.setTraj(msg);
 }
 
 void MPC::rcvOdomCallBack(nav_msgs::OdometryPtr msg)
@@ -74,91 +81,115 @@ void MPC::cmdCallback(const ros::TimerEvent &e)
 
     if (!has_odom && !receive_traj_)
         return;
-    
-    ros::Time time_now = ros::Time::now();
-    double t_cur = (time_now - start_time_).toSec();
 
-    // for test
-    t_cur = get_nearest();
-    // ROS_INFO("state: x=%f, y=%f, v=%f, theta=%f", now_state.x, now_state.y, now_state.v, now_state.theta);
-
-    if (t_cur == traj_duration_ && (csp.get_state(t_cur).head(2) - Eigen::Vector2d(now_state.x, now_state.y)).norm() < tolerance)
+    if (in_test)
     {
-        t_cur+=1.0;
-    }
+        ros::Time time_now = ros::Time::now();
+        double t_cur = (time_now - start_time_).toSec();
 
-    if (t_cur <= traj_duration_ && t_cur >= 0.0)
-    {
-        // for (int i=0; i<T; i++)
-        // {
-        //     Eigen::Vector3d temp;
-        //     if (t_cur + (i+1)*dt < traj_duration_)
-        //         temp = csp.get_state(t_cur + (i+1)*dt);
-        //     else
-        //         temp = csp.get_state(traj_duration_ - dt);
+        // for test
+        t_cur = get_nearest();
+        // ROS_INFO("state: x=%f, y=%f, v=%f, theta=%f", now_state.x, now_state.y, now_state.v, now_state.theta);
 
-        //     xref(0, i) = temp[0];
-        //     xref(1, i) = temp[1];
-        //     xref(2, i) = 10 / 3.6;
-        //     xref(3, i) = temp[2];
-        //     dref(0, i) = 0;
-        //     dref(1, i) = 0;
-        // }
-
-        double t_temp = t_cur;
-        for (int i=0; i<T; i++)
+        if (t_cur == traj_duration_ && (csp.get_state(t_cur).head(2) - Eigen::Vector2d(now_state.x, now_state.y)).norm() < tolerance)
         {
-            Eigen::Vector3d temp;
-
-            if (now_state.v > 0)
-            {
-                t_temp+=now_state.v*dt;
-            }
-
-            double downvt = traj_duration_>3.0?traj_duration_ - 3.0:traj_duration_/2.0; 
-
-            if (t_temp < downvt)
-            {
-                temp = csp.get_state(t_temp);
-                xref(2, i) = 1.5;
-            }
-            else if (t_temp < traj_duration_)
-            {
-                temp = csp.get_state(t_temp);
-                xref(2, i) = 1.5 * (traj_duration_ - t_temp) / (traj_duration_ - downvt);
-            }
-            else
-            {
-                temp = csp.get_state(traj_duration_);
-                xref(2, i) = 1.5;
-            }
-
-            xref(0, i) = temp[0];
-            xref(1, i) = temp[1];
-            xref(3, i) = temp[2];
-
-            if (control_a)
-                dref(0, i) = 0.0;
-            else
-                dref(0, i) = xref(2, i);
-            
-            dref(1, i) = 0.0;
-            // cout<<"xref: x="<<xref(0, i)<<"   y="<<xref(1, i)<<"   v="<<dref(0, i)<<"   theta="<<xref(3, i)<<endl;
-            // cout<<"xref: x="<<xref(0, i)<<"   y="<<xref(1, i)<<"   v="<<xref(2, i)<<"   theta="<<xref(3, i)<<endl;
+            t_cur+=1.0;
         }
-        smooth_yaw();
-        getCmd();
-    }
-    else if (t_cur > traj_duration_)
-    {
-        cmd.speed = 0.0;
-        cmd.omega = 0.0;
+
+        if (t_cur <= traj_duration_ && t_cur >= 0.0)
+        {
+            double t_temp = t_cur;
+            for (int i=0; i<T; i++)
+            {
+                Eigen::Vector3d temp;
+
+                if (now_state.v > 0)
+                {
+                    t_temp+=now_state.v*dt;
+                }
+
+                double downvt = traj_duration_>3.0?traj_duration_ - 3.0:traj_duration_/2.0; 
+
+                if (t_temp < downvt)
+                {
+                    temp = csp.get_state(t_temp);
+                    xref(2, i) = 1.5;
+                }
+                else if (t_temp < traj_duration_)
+                {
+                    temp = csp.get_state(t_temp);
+                    xref(2, i) = 1.5 * (traj_duration_ - t_temp) / (traj_duration_ - downvt);
+                }
+                else
+                {
+                    temp = csp.get_state(traj_duration_);
+                    xref(2, i) = 1.5;
+                }
+
+                xref(0, i) = temp[0];
+                xref(1, i) = temp[1];
+                xref(3, i) = temp[2];
+
+                if (control_a)
+                    dref(0, i) = 0.0;
+                else
+                    dref(0, i) = xref(2, i);
+                
+                dref(1, i) = 0.0;
+            }
+            smooth_yaw();
+            getCmd();
+        }
+        else if (t_cur > traj_duration_)
+        {
+            cmd.speed = 0.0;
+            cmd.omega = 0.0;
+        }
+        else
+        {
+            cout << "[Traj server]: invalid time." << endl;
+        }
     }
     else
     {
-        cout << "[Traj server]: invalid time." << endl;
+        vector<TrajPoint> tp = traj_analyzer.getTrackPoint(T, dt);
+        if (tp.empty())
+        {
+            cmd.speed = 0.0;
+            cmd.omega = 0.0;
+        }
+        else
+        {
+            if (control_a)
+            {
+            
+                for (int i=0; i<T; i++)
+                {
+                    xref(0, i) = tp[i].x;
+                    xref(1, i) = tp[i].y;
+                    xref(2, i) = tp[i].v;
+                    xref(3, i) = tp[i].theta;
+                    dref(0, i) = tp[i].a;
+                    dref(1, i) = tp[i].w;
+                }
+            }
+            else
+            {
+                for (int i=0; i<T; i++)
+                {
+                    xref(0, i) = tp[i].x;
+                    xref(1, i) = tp[i].y;
+                    xref(3, i) = tp[i].theta;
+                    dref(0, i) = tp[i].v;
+                    dref(1, i) = tp[i].w;
+                }
+            }
+            smooth_yaw();
+            getCmd();
+        }
     }
     pos_cmd_pub_.publish(cmd);
+    
     // ROS_INFO("in MPC, the cmd is: a=%f, steer=%f", cmd.drive.acceleration, cmd.drive.steering_angle);
 }
 

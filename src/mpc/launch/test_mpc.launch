@@ -1,8 +1,10 @@
 <launch>
 
   <arg name="odom_topic" value="car/odom" />
+  <arg name="traj_topic" value="planner/trajectory" />
   <arg name="command_topic" value="car/ackermann_cmd" />
   <arg name="control_a" value="false" />
+  <arg name="in_test" value="true" />
 
   <node pkg="mpc" name="mpc" type="mpc" output="screen">
     <remap from="~position_cmd" to="$(arg command_topic)"/>
@@ -16,10 +18,10 @@
     <param name="mpc/max_speed" value="1.5"  type="double"/>
     <param name="mpc/max_accel" value="0.5"  type="double"/>
     <param name="mpc/tolerance" value="0.1"  type="double"/>
-    <param name="mpc/in_test" value="true"  type="bool"/>
+    <param name="mpc/in_test" value="$(arg in_test)"  type="bool"/>
     <param name="mpc/control_a" value="$(arg control_a)"  type="bool"/>
-    <!-- <remap from="~odometry" to="$(arg odom_topic)"/> -->
     <remap from="~odom_world" to="$(arg odom_topic)"/>
+    <remap from="~trajectory" to="$(arg traj_topic)"/>
   </node>
    
   <node pkg="kimatic_simulator" type="kimatic_simulator_node" name="kimatic_simulator_node" output="screen" required="true">
@@ -30,6 +32,6 @@
   </node>
 
     <!-- rviz -->
-    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find mpc)/rviz/default.rviz" required="true" />
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find mpc)/rviz/default.rviz" required="true" />
 
 </launch>
