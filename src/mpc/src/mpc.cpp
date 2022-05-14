@@ -12,9 +12,13 @@ void MPC::init(ros::NodeHandle &nh)
     nh.param("mpc/max_domega", max_domega, -1.0);
     nh.param("mpc/max_speed", max_speed, -1.0);
     nh.param("mpc/max_accel", max_accel, -1.0);
-    nh.param("mpc/tolerance", tolerance, -1.0);
+    nh.param("mpc/tolerance", tolerance, 0.1);
     nh.param("mpc/in_test", in_test, false);
     nh.param("mpc/control_a", control_a, false);
+    nh.param<std::vector<double>>("mpc/matrix_q", Q, std::vector<double>());
+    nh.param<std::vector<double>>("mpc/matrix_r", R, std::vector<double>());
+    nh.param<std::vector<double>>("mpc/matrix_rd", Rd, std::vector<double>());
+    nh.param<string>("mpc/test_traj", test_traj, "xxx");
 
     has_odom = false;
     receive_traj_ = false;
@@ -30,12 +34,11 @@ void MPC::init(ros::NodeHandle &nh)
     cmd.roll = 0.0;
     cmd.speed = 0.0;
 
-    pos_cmd_pub_ = nh.advertise<diablo_sdk::Diablo_Ctrl>("position_cmd", 200);
+    pos_cmd_pub_ = nh.advertise<diablo_sdk::Diablo_Ctrl>("cmd", 200);
     vis_pub = nh.advertise<visualization_msgs::Marker>("/following_path", 10);
-    fake_odom_pub = nh.advertise<nav_msgs::Odometry>("odometry", 1);
-    cmd_timer_ = nh.createTimer(ros::Duration(dt), &MPC::cmdCallback, this);
-    odom_sub_ = nh.subscribe("odom_world", 1, &MPC::rcvOdomCallBack, this);
-    traj_sub_ = nh.subscribe("trajectory", 1, &MPC::rcvTrajCallBack, this);
+    cmd_timer_ = nh.createTimer(ros::Duration(0.01), &MPC::cmdCallback, this);
+    odom_sub_ = nh.subscribe("odom", 1, &MPC::rcvOdomCallBack, this);
+    traj_sub_ = nh.subscribe("traj", 1, &MPC::rcvTrajCallBack, this);
 
     if (in_test)
     {
@@ -152,8 +155,8 @@ void MPC::cmdCallback(const ros::TimerEvent &e)
     }
     else
     {
-        vector<TrajPoint> tp = traj_analyzer.getTrackPoint(T, dt);
-        if (tp.empty())
+        vector<TrajPoint> P = traj_analyzer.getRefPoints(T, dt);
+        if (traj_analyzer.at_goal)
         {
             cmd.speed = 0.0;
             cmd.omega = 0.0;
@@ -165,23 +168,23 @@ void MPC::cmdCallback(const ros::TimerEvent &e)
             
                 for (int i=0; i<T; i++)
                 {
-                    xref(0, i) = tp[i].x;
-                    xref(1, i) = tp[i].y;
-                    xref(2, i) = tp[i].v;
-                    xref(3, i) = tp[i].theta;
-                    dref(0, i) = tp[i].a;
-                    dref(1, i) = tp[i].w;
+                    xref(0, i) = P[i].x;
+                    xref(1, i) = P[i].y;
+                    xref(2, i) = P[i].v;
+                    xref(3, i) = P[i].theta;
+                    dref(0, i) = 0.0;
+                    dref(1, i) = 0.0;
                 }
             }
             else
             {
                 for (int i=0; i<T; i++)
                 {
-                    xref(0, i) = tp[i].x;
-                    xref(1, i) = tp[i].y;
-                    xref(3, i) = tp[i].theta;
-                    dref(0, i) = tp[i].v;
-                    dref(1, i) = tp[i].w;
+                    xref(0, i) = P[i].x;
+                    xref(1, i) = P[i].y;
+                    xref(3, i) = P[i].theta;
+                    dref(0, i) = P[i].v;
+                    dref(1, i) = P[i].w;
                 }
             }
             smooth_yaw();
@@ -767,19 +770,4 @@ void MPC::getCmd(void)
     else
         cmd.speed = output(0, 0);
     cmd.omega = output(1, 0);
-}
- 
-int main( int argc, char * argv[] )
-{ 
-  ros::init(argc, argv, "mpc_node");
-  ros::NodeHandle nh("~");
-  ros::Duration(2.0).sleep();
-
-  MPC mpc_tracker;
-
-  mpc_tracker.init(nh);
-
-  ros::spin();
-
-  return 0;
 }

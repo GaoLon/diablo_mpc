@@ -42,9 +42,22 @@ include_directories(
     ${PROJECT_SOURCE_DIR}/include
 )
 
-add_executable (mpc src/mpc.cpp src/cubic_spline_planner.cpp)
+add_library(mpc
+  src/mpc.cpp
+  src/cubic_spline_planner.cpp
+)
+
 add_dependencies(mpc mpc_gencpp)
+
 target_link_libraries(mpc
     OsqpEigen::OsqpEigen
     ${catkin_LIBRARIES}
     )
+
+add_executable(mpc_controller_node
+    src/mpc_node.cpp
+  )
+target_link_libraries(mpc_controller_node
+  mpc
+  ${catkin_LIBRARIES}
+)

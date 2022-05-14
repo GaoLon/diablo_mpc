@@ -1,0 +1,22 @@
+mpc:
+  du_threshold: 0.1
+  # du_threshold: 0.001
+  dt: 0.01
+  # dt: 0.02
+  max_iter: 3
+  # max_iter: 150
+  predict_steps: 100
+  # predict_steps: 20
+  max_omega: 2.4
+  max_domega: 1.0
+  max_speed: 1.5
+  min_speed: -1.5
+  max_accel: 0.5
+  in_test: true
+  control_a: true
+  matrix_q: [10.0, 10.0, 2.5, 2.5]
+  matrix_r: [0.1, 0.01]
+  matrix_rd: [0.01, 0.01]
+  # matrix_rd: [0.50, 0.30]
+  test_traj: "/home/xulong/bk/Minco2"
+    

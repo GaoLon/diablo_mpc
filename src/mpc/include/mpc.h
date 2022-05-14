@@ -22,6 +22,15 @@
 using namespace std;
 using namespace Eigen;
 
+class MPCState
+{
+public:
+    double x = 0;
+    double y = 0;
+    double v = 0; 
+    double theta = 0;
+};
+
 class MPC
 {
 private:
@@ -31,9 +40,9 @@ private:
     double dt = 0.2;
     int T = 5;
     int max_iter = 3;
-    double Q[4] = {10, 10, 2.5, 0.5};
-    double R[2] = {0.01, 0.01};
-    double Rd[2] = {0.01, 1.0};
+    vector<double> Q = {10, 10, 2.5, 0.5};
+    vector<double> R = {0.01, 0.01};
+    vector<double> Rd = {0.01, 1.0};
     /// constraints
     double max_omega = M_PI / 4;
     double max_domega = M_PI / 6;
@@ -66,7 +75,7 @@ private:
     // ros interface
 	ros::NodeHandle node_;
     ros::Timer cmd_timer_;
-    ros::Publisher pos_cmd_pub_, vis_pub, fake_odom_pub;
+    ros::Publisher pos_cmd_pub_, vis_pub;
     ros::Subscriber odom_sub_, traj_sub_;
     diablo_sdk::Diablo_Ctrl cmd;
     void cmdCallback(const ros::TimerEvent &e);
@@ -76,6 +85,7 @@ private:
     // for test tracking performance
     bool in_test;
     cubic_spline_planner csp;
+    string test_traj;
     vector<Eigen::Vector3d> csp_path;
 
     // MPC function

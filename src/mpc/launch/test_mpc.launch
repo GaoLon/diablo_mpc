@@ -2,13 +2,13 @@
 
   <arg name="odom_topic" value="car/odom" />
   <arg name="traj_topic" value="planner/trajectory" />
-  <arg name="command_topic" value="car/ackermann_cmd" />
-  <arg name="control_a" value="false" />
-  <arg name="in_test" value="true" />
+  <arg name="cmd_topic" value="car/ackermann_cmd" />
 
-  <node pkg="mpc" name="mpc" type="mpc" output="screen">
-    <remap from="~position_cmd" to="$(arg command_topic)"/>
-    <param name="mpc/du_threshold" value="0.1" type="double"/>
+  <rosparam command="load" file="$(find mpc)/config/param.yaml" />
+
+  <node pkg="mpc" name="mpc_controller_node" type="mpc_controller_node" output="screen">
+    <remap from="cmd" to="$(arg cmd_topic)"/>
+    <!-- <param name="mpc/du_threshold" value="0.1" type="double"/>
     <param name="mpc/dt" value="0.01" type="double"/>
     <param name="mpc/max_iter" value="3"  type="int"/>
     <param name="mpc/predict_steps" value="120"  type="int" unless="$(arg control_a)"/>
@@ -19,13 +19,13 @@
     <param name="mpc/max_accel" value="0.5"  type="double"/>
     <param name="mpc/tolerance" value="0.1"  type="double"/>
     <param name="mpc/in_test" value="$(arg in_test)"  type="bool"/>
-    <param name="mpc/control_a" value="$(arg control_a)"  type="bool"/>
-    <remap from="~odom_world" to="$(arg odom_topic)"/>
-    <remap from="~trajectory" to="$(arg traj_topic)"/>
+    <param name="mpc/control_a" value="$(arg control_a)"  type="bool"/> -->
+    <remap from="odom" to="$(arg odom_topic)"/>
+    <remap from="traj" to="$(arg traj_topic)"/>
   </node>
    
   <node pkg="kimatic_simulator" type="kimatic_simulator_node" name="kimatic_simulator_node" output="screen" required="true">
-    <remap from ="~command" to="$(arg command_topic)"/>
+    <remap from ="~command" to="$(arg cmd_topic)"/>
     <param name="simulator/max_omega" value="2.4"  type="double"/>
     <param name="simulator/max_speed" value="1.5"  type="double"/>
     <remap from="~odometry" to="$(arg odom_topic)"/>
