@@ -12,6 +12,7 @@
 
 #include <ros/ros.h>
 #include <nav_msgs/Odometry.h>
+#include <geometry_msgs/PoseStamped.h>
 #include <visualization_msgs/Marker.h>
 
 #include "cubic_spline_planner.h"
@@ -75,12 +76,13 @@ private:
     // ros interface
 	ros::NodeHandle node_;
     ros::Timer cmd_timer_;
-    ros::Publisher pos_cmd_pub_, vis_pub;
-    ros::Subscriber odom_sub_, traj_sub_;
+    ros::Publisher pos_cmd_pub_, vis_pub, predict_pub, ref_pub;
+    ros::Subscriber odom_sub_, traj_sub_, trigger_sub_;
     diablo_sdk::Diablo_Ctrl cmd;
     void cmdCallback(const ros::TimerEvent &e);
     void rcvOdomCallBack(nav_msgs::OdometryPtr msg);
     void rcvTrajCallBack(mpc::PolynomeConstPtr msg);
+    void rcvTriggerCallBack(const geometry_msgs::PoseStamped msg);
 
     // for test tracking performance
     bool in_test;
@@ -92,11 +94,13 @@ private:
     void getLinearModel(const MPCState& s);
     void stateTrans(MPCState& s, double a, double yaw_dot);
     void predictMotion(void);
+    void predictMotion(MPCState *b);
     void solveMPCV(void);
     void solveMPCA(void);
     void getCmd(void);
 
     // utils
+    MPCState xopt[500];
     void normlize_theta(double& th)
     {
         while (th > M_PI)
@@ -173,17 +177,16 @@ private:
         sphere.action = line_strip.action = visualization_msgs::Marker::ADD;
         sphere.id = id;
         line_strip.id = id + 1000;
-        id++;
 
         sphere.pose.orientation.w = line_strip.pose.orientation.w = 1.0;
         sphere.color.r = line_strip.color.r = 1;
         sphere.color.g = line_strip.color.g = 0;
         sphere.color.b = line_strip.color.b = 1;
         sphere.color.a = line_strip.color.a = 1;
-        sphere.scale.x = 0.1;
-        sphere.scale.y = 0.1;
-        sphere.scale.z = 0.1;
-        line_strip.scale.x = 0.1 / 2;
+        sphere.scale.x = 0.04;
+        sphere.scale.y = 0.04;
+        sphere.scale.z = 0.04;
+        line_strip.scale.x = 0.04 / 2;
         geometry_msgs::Point pt;
         
         for (auto p:csp_path)
@@ -194,6 +197,72 @@ private:
             line_strip.points.push_back(pt);
         }
         vis_pub.publish(line_strip);
+    }
+    void drawPredictPath(MPCState *b)
+    {
+        int id = 0;
+        double sc = 0.05;
+        visualization_msgs::Marker sphere, line_strip;
+        sphere.header.frame_id = line_strip.header.frame_id = "world";
+        sphere.header.stamp = line_strip.header.stamp = ros::Time::now();
+        sphere.type = visualization_msgs::Marker::SPHERE_LIST;
+        line_strip.type = visualization_msgs::Marker::LINE_STRIP;
+        sphere.action = line_strip.action = visualization_msgs::Marker::ADD;
+        sphere.id = id;
+        line_strip.id = id + 1000;
+
+        sphere.pose.orientation.w = line_strip.pose.orientation.w = 1.0;
+        sphere.color.r = line_strip.color.r = 0;
+        sphere.color.g = line_strip.color.g = 1;
+        sphere.color.b = line_strip.color.b = 0;
+        sphere.color.a = line_strip.color.a = 1;
+        sphere.scale.x = sc;
+        sphere.scale.y = sc;
+        sphere.scale.z = sc;
+        line_strip.scale.x = sc / 2;
+        geometry_msgs::Point pt;
+        
+        for (int i=0; i<T; i++)
+        {
+            pt.x = b[i].x;
+            pt.y = b[i].y;
+            pt.z = 0.0;
+            line_strip.points.push_back(pt);
+        }
+        predict_pub.publish(line_strip);
+    }
+    void drawRefPath(void)
+    {
+        int id = 0;
+        double sc = 0.05;
+        visualization_msgs::Marker sphere, line_strip;
+        sphere.header.frame_id = line_strip.header.frame_id = "world";
+        sphere.header.stamp = line_strip.header.stamp = ros::Time::now();
+        sphere.type = visualization_msgs::Marker::SPHERE_LIST;
+        line_strip.type = visualization_msgs::Marker::LINE_STRIP;
+        sphere.action = line_strip.action = visualization_msgs::Marker::ADD;
+        sphere.id = id;
+        line_strip.id = id + 1000;
+
+        sphere.pose.orientation.w = line_strip.pose.orientation.w = 1.0;
+        sphere.color.r = line_strip.color.r = 0;
+        sphere.color.g = line_strip.color.g = 0;
+        sphere.color.b = line_strip.color.b = 1;
+        sphere.color.a = line_strip.color.a = 1;
+        sphere.scale.x = sc;
+        sphere.scale.y = sc;
+        sphere.scale.z = sc;
+        line_strip.scale.x = sc / 2;
+        geometry_msgs::Point pt;
+        
+        for (int i=0; i<T; i++)
+        {
+            pt.x = xref(0, i);
+            pt.y = xref(1, i);
+            pt.z = 0.0;
+            line_strip.points.push_back(pt);
+        }
+        ref_pub.publish(line_strip);
     }
 
 public:

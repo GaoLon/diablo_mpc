@@ -20,6 +20,8 @@ void MPC::init(ros::NodeHandle &nh)
     nh.param<std::vector<double>>("mpc/matrix_rd", Rd, std::vector<double>());
     nh.param<string>("mpc/test_traj", test_traj, "xxx");
 
+    cout<<"du_t="<<du_th<<endl;
+
     has_odom = false;
     receive_traj_ = false;
     max_comega = max_domega * dt;
@@ -36,18 +38,30 @@ void MPC::init(ros::NodeHandle &nh)
 
     pos_cmd_pub_ = nh.advertise<diablo_sdk::Diablo_Ctrl>("cmd", 200);
     vis_pub = nh.advertise<visualization_msgs::Marker>("/following_path", 10);
+    predict_pub = nh.advertise<visualization_msgs::Marker>("/predict_path", 10);
+    ref_pub = nh.advertise<visualization_msgs::Marker>("/reference_path", 10);
     cmd_timer_ = nh.createTimer(ros::Duration(0.01), &MPC::cmdCallback, this);
     odom_sub_ = nh.subscribe("odom", 1, &MPC::rcvOdomCallBack, this);
     traj_sub_ = nh.subscribe("traj", 1, &MPC::rcvTrajCallBack, this);
 
     if (in_test)
     {
-        csp_path = csp.get_path();
-        traj_duration_ = csp.get_duration();
-        start_time_ = ros::Time::now();
-        t_track = 0.0;
-        receive_traj_ = true;
+        // csp_path = csp.get_path();
+        // traj_duration_ = csp.get_duration();
+        // start_time_ = ros::Time::now();
+        // t_track = 0.0;
+        // receive_traj_ = true;
+        trigger_sub_ = nh.subscribe("/move_base_simple/goal", 1, &MPC::rcvTriggerCallBack, this);
     }
+}
+
+void MPC::rcvTriggerCallBack(const geometry_msgs::PoseStamped msg)
+{
+    csp_path = csp.get_path();
+    traj_duration_ = csp.get_duration();
+    start_time_ = ros::Time::now();
+    t_track = 0.0;
+    receive_traj_ = true;
 }
 
 void MPC::rcvTrajCallBack(mpc::PolynomeConstPtr msg)
@@ -82,7 +96,7 @@ void MPC::cmdCallback(const ros::TimerEvent &e)
     drawFollowPath();
     // return;
 
-    if (!has_odom && !receive_traj_)
+    if (!has_odom || !receive_traj_)
         return;
 
     if (in_test)
@@ -292,8 +306,44 @@ void MPC::predictMotion(void)
     }
 }
 
+void MPC::predictMotion(MPCState* b)
+{
+    b[0] = xbar[0];
+
+    Eigen::MatrixXd Ax;
+    Eigen::MatrixXd Bx;
+    Eigen::MatrixXd Cx;
+    Eigen::MatrixXd xnext;
+    MPCState temp = xbar[0];
+    for (int i=1; i<T+1; i++)
+    {
+        Ax = Eigen::Matrix4d::Identity();
+        Ax(0, 2) = dt * cos(xbar[i-1].theta);
+        Ax(1, 2) = dt * sin(xbar[i-1].theta);
+        Ax(0, 3) = -xbar[i-1].v * Ax(1, 2);
+        Ax(1, 3) = xbar[i-1].v * Ax(0, 2);
+        Ax(3, 2) = 0.0;
+
+        Bx = Eigen::Matrix<double, 4, 2>::Zero();
+        Bx(2, 0) = dt;
+        Bx(3, 1) = dt;
+
+        Cx = Eigen::Vector4d::Zero();
+        Cx(0) = -Ax(0, 3) * xbar[i-1].theta;
+        Cx(1) = -Ax(1, 3) * xbar[i-1].theta;
+        
+        xnext = Ax*Eigen::Vector4d(temp.x, temp.y, temp.v, temp.theta) + Bx*Eigen::Vector2d(output(0, i-1), output(1, i-1)) + Cx;
+        temp.x = xnext(0);
+        temp.y = xnext(1);
+        temp.v = xnext(2);
+        temp.theta = xnext(3);
+        b[i] = temp;
+    }
+}
+
 void MPC::solveMPCA(void)
 {
+    static int debug_dt = 0;
     const int dimx = 4 * T;
     const int dimu = 2 * T;
     const int nx = dimx + dimu;
@@ -480,6 +530,9 @@ void MPC::solveMPCA(void)
     // settings
     solver.settings()->setVerbosity(false);
     solver.settings()->setWarmStart(true);
+    solver.settings()->setAbsoluteTolerance(1e-6);
+    solver.settings()->setMaxIteration(30000);
+    solver.settings()->setRelativeTolerance(1e-6);
 
     // set the initial data of the QP solver
     solver.data()->setNumberOfVariables(nx);
@@ -501,7 +554,11 @@ void MPC::solveMPCA(void)
 
     // get the controller input
     QPSolution = solver.getSolution();
-    // ROS_INFO("Solution: a0=%f     omega0=%f", QPSolution[dimx], QPSolution[dimx+1]);
+    if (debug_dt++>100)
+    {
+        ROS_INFO("Solution: a0=%f     omega0=%f", QPSolution[dimx], QPSolution[dimx+1]);
+        debug_dt = 0;
+    }
     for (int i=0; i<dimu; i+=2)
     {
         output(0, i) = QPSolution[dimx+i];
@@ -738,12 +795,11 @@ void MPC::solveMPCV(void)
 void MPC::getCmd(void)
 {
     int iter;
-
+    ros::Time begin = ros::Time::now();
     for (iter=0; iter<max_iter; iter++)
     {
         predictMotion();
         last_output = output;
-        // solveMPC();
         if (control_a)
             solveMPCA();
         else
@@ -753,16 +809,20 @@ void MPC::getCmd(void)
         {
             du = du + fabs(output(0, i) - last_output(0, i))+ fabs(output(1, i) - last_output(1, i));
         }
-        if (du <= du_th)
+        // break;
+        if (du <= du_th || (ros::Time::now()-begin).toSec()>0.01)
         {
             break;
         }
     }
     if (iter == max_iter)
     {
-        // ROS_WARN("MPC Iterative is max iter");
+        ROS_WARN("MPC Iterative is max iter");
     }
 
+    predictMotion(xopt);
+    drawRefPath();
+    drawPredictPath(xopt);
     if (control_a)
     {
         cmd.speed = now_state.v + dt * output(0, 0);
