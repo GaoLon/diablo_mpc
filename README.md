@@ -14,7 +14,7 @@ roslaunch mpc test_mpc.launch
 
 ## Details
 
-See in [markdown_file](./README.markdown)
+See in [markdown_file](./readme.md)
 
 ### Notation
 
