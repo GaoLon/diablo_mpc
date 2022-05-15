@@ -315,30 +315,54 @@ void MPC::predictMotion(MPCState* b)
     Eigen::MatrixXd Cx;
     Eigen::MatrixXd xnext;
     MPCState temp = xbar[0];
-    for (int i=1; i<T+1; i++)
-    {
-        Ax = Eigen::Matrix4d::Identity();
-        Ax(0, 2) = dt * cos(xbar[i-1].theta);
-        Ax(1, 2) = dt * sin(xbar[i-1].theta);
-        Ax(0, 3) = -xbar[i-1].v * Ax(1, 2);
-        Ax(1, 3) = xbar[i-1].v * Ax(0, 2);
-        Ax(3, 2) = 0.0;
+    if (control_a)
+        for (int i=1; i<T+1; i++)
+        {
+            Ax = Eigen::Matrix4d::Identity();
+            Ax(0, 2) = dt * cos(xbar[i-1].theta);
+            Ax(1, 2) = dt * sin(xbar[i-1].theta);
+            Ax(0, 3) = -xbar[i-1].v * Ax(1, 2);
+            Ax(1, 3) = xbar[i-1].v * Ax(0, 2);
+            Ax(3, 2) = 0.0;
 
-        Bx = Eigen::Matrix<double, 4, 2>::Zero();
-        Bx(2, 0) = dt;
-        Bx(3, 1) = dt;
+            Bx = Eigen::Matrix<double, 4, 2>::Zero();
+            Bx(2, 0) = dt;
+            Bx(3, 1) = dt;
 
-        Cx = Eigen::Vector4d::Zero();
-        Cx(0) = -Ax(0, 3) * xbar[i-1].theta;
-        Cx(1) = -Ax(1, 3) * xbar[i-1].theta;
-        
-        xnext = Ax*Eigen::Vector4d(temp.x, temp.y, temp.v, temp.theta) + Bx*Eigen::Vector2d(output(0, i-1), output(1, i-1)) + Cx;
-        temp.x = xnext(0);
-        temp.y = xnext(1);
-        temp.v = xnext(2);
-        temp.theta = xnext(3);
-        b[i] = temp;
-    }
+            Cx = Eigen::Vector4d::Zero();
+            Cx(0) = -Ax(0, 3) * xbar[i-1].theta;
+            Cx(1) = -Ax(1, 3) * xbar[i-1].theta;
+            
+            xnext = Ax*Eigen::Vector4d(temp.x, temp.y, temp.v, temp.theta) + Bx*Eigen::Vector2d(output(0, i-1), output(1, i-1)) + Cx;
+            temp.x = xnext(0);
+            temp.y = xnext(1);
+            temp.v = xnext(2);
+            temp.theta = xnext(3);
+            b[i] = temp;
+        }
+    else
+         
+        for (int i=1; i<T+1; i++)
+        {  
+            Bx = Eigen::Matrix<double, 3, 2>::Zero();
+            Bx(0, 0) = cos(xbar[i-1].theta) * dt;
+            Bx(1, 0) = sin(xbar[i-1].theta) * dt;
+            Bx(2, 1) = dt;
+
+            Ax = Eigen::Matrix3d::Identity();
+            Ax(0, 2) = -Bx(1, 0) * xbar[i-1].v;
+            Ax(1, 2) = Bx(0, 0) * xbar[i-1].v;
+
+            Cx = Eigen::Vector3d::Zero();
+            Cx(0) = -Ax(0, 2) * xbar[i-1].theta; 
+            Cx(1) = -Ax(1, 2) * xbar[i-1].theta;
+            xnext = Ax*Eigen::Vector3d(temp.x, temp.y, temp.theta) + Bx*Eigen::Vector2d(output(0, i-1), output(1, i-1)) + Cx;
+            temp.x = xnext(0);
+            temp.y = xnext(1);
+            temp.theta = xnext(2);
+            b[i] = temp;
+        }
+
 }
 
 void MPC::solveMPCA(void)
@@ -763,6 +787,9 @@ void MPC::solveMPCV(void)
     // settings
     solver.settings()->setVerbosity(false);
     solver.settings()->setWarmStart(true);
+    solver.settings()->setAbsoluteTolerance(1e-6);
+    solver.settings()->setMaxIteration(30000);
+    solver.settings()->setRelativeTolerance(1e-6);
 
     // set the initial data of the QP solver
     solver.data()->setNumberOfVariables(nx);
