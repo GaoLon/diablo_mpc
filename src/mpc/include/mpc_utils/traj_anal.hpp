@@ -104,7 +104,6 @@ public:
       for (double t=t_cur+dt; j<T; j++, t+=dt)
       {
         double temp = t;
-        bool gedit = false;
         if (temp <= traj_duration)
         {
           Eigen::Vector3d po = minco_traj.getPos(temp);

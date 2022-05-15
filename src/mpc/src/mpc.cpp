@@ -197,8 +197,8 @@ void MPC::cmdCallback(const ros::TimerEvent &e)
                     xref(0, i) = P[i].x;
                     xref(1, i) = P[i].y;
                     xref(3, i) = P[i].theta;
-                    dref(0, i) = P[i].v;
-                    dref(1, i) = P[i].w;
+                    dref(0, i) = 0.0;
+                    dref(1, i) = 0.0;
                 }
             }
             smooth_yaw();
