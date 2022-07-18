@@ -28,6 +28,7 @@
     <remap from ="~command" to="$(arg cmd_topic)"/>
     <param name="simulator/max_omega" value="2.4"  type="double"/>
     <param name="simulator/max_speed" value="1.5"  type="double"/>
+    <param name="simulator/time_delay" value="0.2"  type="double"/>
     <remap from="~odometry" to="$(arg odom_topic)"/>
   </node>
 

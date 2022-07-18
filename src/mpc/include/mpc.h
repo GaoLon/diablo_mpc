@@ -41,6 +41,7 @@ private:
     double dt = 0.2;
     int T = 5;
     int max_iter = 3;
+    int delay_num;
     vector<double> Q = {10, 10, 2.5, 0.5};
     vector<double> R = {0.01, 0.01};
     vector<double> Rd = {0.01, 1.0};
@@ -61,6 +62,7 @@ private:
     Eigen::MatrixXd dref;
     Eigen::MatrixXd output;
     Eigen::MatrixXd last_output;
+    std::vector<Eigen::Vector2d> output_buff;
 
     // control data
     bool has_odom;

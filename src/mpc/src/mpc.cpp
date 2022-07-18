@@ -12,6 +12,7 @@ void MPC::init(ros::NodeHandle &nh)
     nh.param("mpc/max_domega", max_domega, -1.0);
     nh.param("mpc/max_speed", max_speed, -1.0);
     nh.param("mpc/max_accel", max_accel, -1.0);
+    nh.param("mpc/delay_num", delay_num, -1);
     nh.param("mpc/tolerance", tolerance, 0.1);
     nh.param("mpc/in_test", in_test, false);
     nh.param("mpc/control_a", control_a, false);
@@ -28,6 +29,8 @@ void MPC::init(ros::NodeHandle &nh)
     max_cv = max_accel * dt;
     xref = Eigen::Matrix<double, 4, 500>::Zero(4, 500);
     last_output = output = dref = Eigen::Matrix<double, 2, 500>::Zero(2, 500);
+    for (int i=0; i<delay_num; i++)
+        output_buff.push_back(Eigen::Vector2d::Zero());
     cmd.height = 0.5;
     cmd.height_vel = 0.0;
     cmd.omega = 0.0;
@@ -583,17 +586,248 @@ void MPC::solveMPCA(void)
         ROS_INFO("Solution: a0=%f     omega0=%f", QPSolution[dimx], QPSolution[dimx+1]);
         debug_dt = 0;
     }
-    for (int i=0; i<dimu; i+=2)
+    for (int i=0, j=0; i<dimu; i+=2, j++)
     {
-        output(0, i) = QPSolution[dimx+i];
-        output(1, i) = QPSolution[dimx+i+1];
+        output(0, j) = QPSolution[dimx+i];
+        output(1, j) = QPSolution[dimx+i+1];
     }
 }
 
+// no delay time compensate
+// void MPC::solveMPCV(void)
+// {
+//     const int dimx = 3 * T;
+//     const int dimu = 2 * T;
+//     const int nx = dimx + dimu;
+
+//     Eigen::SparseMatrix<double> hessian;
+//     Eigen::VectorXd gradient = Eigen::VectorXd::Zero(nx);
+//     Eigen::SparseMatrix<double> linearMatrix;
+//     Eigen::VectorXd lowerBound;
+//     Eigen::VectorXd upperBound;
+
+//     // first-order
+//     for (int i=0, j=0, k=0; i<dimx; i+=3, j++, k+=2)
+//     {
+//         gradient[i] = -2 * Q[0] * xref(0, j);
+//         gradient[i+1] = -2 * Q[1] * xref(1, j);
+//         gradient[i+2] = -2 * Q[3] * xref(3, j);
+//         gradient[dimx+k] = -2 * Q[2] * dref(0, j);
+//     }
+
+//     // second-order
+//     const int nnzQ = nx + dimu - 2;
+//     int irowQ[nnzQ];
+//     int jcolQ[nnzQ];
+//     double dQ[nnzQ];
+//     for (int i=0; i<nx; i++)
+//     {
+//         irowQ[i] = jcolQ[i] = i;
+//     }
+//     for (int i=nx; i<nnzQ; i++)
+//     {
+//         irowQ[i] = i - dimu + 2;
+//         jcolQ[i] = i - dimu;
+//     }
+//     for (int i=0; i<dimx; i+=3)
+//     {
+//         dQ[i] = Q[0] * 2.0;
+//         dQ[i+1] = Q[1] * 2.0;
+//         dQ[i+2] = Q[3] * 2.0;
+//     }
+//     dQ[dimx] = dQ[nx-2] = (R[0] + Rd[0] + Q[2]) * 2.0;
+//     dQ[dimx + 1] = dQ[nx-1] = (R[1] + Rd[1]) * 2.0;
+//     for (int i=dimx+2; i<nx-2; i+=2)
+//     {
+//         dQ[i] = 2 * (R[0] + 2 * Rd[0] + Q[2]);
+//         dQ[i+1] = 2 * (R[1] + 2 * Rd[1]);
+//     }
+//     for (int i=nx; i<nnzQ; i+=2)
+//     {
+//         dQ[i] = -Rd[0] * 2.0;
+//         dQ[i+1] = -Rd[1] * 2.0;
+//     }
+//     hessian.resize(nx, nx);
+//     Eigen::MatrixXd QQ(nx, nx);
+//     for (int i=0; i<nx; i++)
+//     {
+//         hessian.insert(irowQ[i], jcolQ[i]) = dQ[i];
+//     }
+//     for (int i=nx; i<nnzQ; i++)
+//     {
+//         hessian.insert(irowQ[i], jcolQ[i]) = dQ[i];
+//         hessian.insert(jcolQ[i], irowQ[i]) = dQ[i];
+//     }
+
+//     // equality constraints
+//     MPCState temp = now_state;
+//     getLinearModel(temp);
+//     int my = dimx;
+//     double b[my];
+//     const int nnzA = 11 * T - 5;
+//     int irowA[nnzA];
+//     int jcolA[nnzA];
+//     double dA[nnzA];
+//     Eigen::Vector3d temp_vec(temp.x, temp.y, temp.theta);
+//     Eigen::Vector3d temp_b = A*temp_vec + C;
+    
+//     for (int i=0; i<dimx; i++)
+//     {
+//         irowA[i] = jcolA[i] = i;
+//         dA[i] = 1;
+//     }
+//     b[0] = temp_b[0];
+//     b[1] = temp_b[1];
+//     b[2] = temp_b[2];
+//     irowA[dimx] = 0;
+//     jcolA[dimx] = dimx;
+//     dA[dimx] = -B(0, 0);
+//     irowA[dimx+1] = 1;
+//     jcolA[dimx+1] = dimx;
+//     dA[dimx+1] = -B(1, 0);
+//     irowA[dimx+2] = 2;
+//     jcolA[dimx+2] = dimx+1;
+//     dA[dimx+2] = -B(2, 1);
+//     int ABidx = 8*T - 8;
+//     int ABbegin = dimx+3;
+//     for (int i=0, j=1; i<ABidx; i+=8, j++)
+//     {
+//         getLinearModel(xbar[j]);
+//         for (int k=0; k<3; k++)
+//         {
+//             b[3*j+k] = C[k];
+//             irowA[ABbegin + i + k] = 3*j + k;
+//             jcolA[ABbegin + i + k] = irowA[ABbegin + i + k] - 3;
+//             dA[ABbegin + i + k] = -A(k, k);
+//         }
+//         irowA[ABbegin + i + 3] = 3*j;
+//         jcolA[ABbegin + i + 3] = 3*j - 1;
+//         dA[ABbegin + i + 3] = -A(0, 2);
+
+//         irowA[ABbegin + i + 4] = 3*j + 1;
+//         jcolA[ABbegin + i + 4] = 3*j - 1;
+//         dA[ABbegin + i + 4] = -A(1, 2);
+        
+//         irowA[ABbegin + i + 5] = 3*j;
+//         jcolA[ABbegin + i + 5] = dimx + 2*j;
+//         dA[ABbegin + i + 5] = -B(0, 0);
+        
+//         irowA[ABbegin + i + 6] = 3*j + 1;
+//         jcolA[ABbegin + i + 6] = dimx + 2*j;
+//         dA[ABbegin + i + 6] = -B(1, 0);
+        
+//         irowA[ABbegin + i + 7] = 3*j + 2;
+//         jcolA[ABbegin + i + 7] = dimx + 2*j + 1;
+//         dA[ABbegin + i + 7] = -B(2, 1);
+//     }
+
+//     // iequality constraints
+//     const int mz  = 2 * T - 2;
+//     const int nnzC = 2 * dimu - 4;
+//     int   irowC[nnzC];
+//     int   jcolC[nnzC];
+//     double   dC[nnzC];
+//     for (int i=0, k=0; i<mz; i+=2, k+=4)
+//     {
+//         irowC[k] = i;
+//         jcolC[k] = dimx  + i;
+//         dC[k] = -1.0;
+
+//         irowC[k+1] = i;
+//         jcolC[k+1] = jcolC[k] +2;
+//         dC[k+1] = 1.0;
+
+//         irowC[k+2] = i + 1;
+//         jcolC[k+2] = dimx + 1 + i;
+//         dC[k+2] = -1.0;
+
+//         irowC[k+3] = i + 1;
+//         jcolC[k+3] = jcolC[k+2] +2;
+//         dC[k+3] = 1.0;
+//     }
+
+//     // xlimits and all
+//     int mx = dimu;
+//     int nc = mx+my+mz;
+//     lowerBound.resize(nc);
+//     upperBound.resize(nc);
+//     linearMatrix.resize(nc, nx);
+//     for (int i=0; i<mx; i+=2)
+//     {
+//         lowerBound[i] = -max_speed;
+//         lowerBound[i+1] = -max_omega;
+//         upperBound[i] = max_speed;
+//         upperBound[i+1] = max_omega;
+//         linearMatrix.insert(i, dimx+i) = 1;
+//         linearMatrix.insert(i+1, dimx+i+1) = 1;
+//     }
+
+//     for (int i=0; i<nnzA; i++)
+//     {
+//         linearMatrix.insert(irowA[i]+mx, jcolA[i]) = dA[i];
+//     }
+
+//     for (int i=0; i<my; i++)
+//     {
+//         lowerBound[mx+i] = upperBound[mx+i] = b[i];
+//     }
+
+//     for (int i=0; i<nnzC; i++)
+//     {
+//         linearMatrix.insert(irowC[i]+mx+my, jcolC[i]) = dC[i];
+//     }
+
+//     for (int i=0; i<mz; i+=2)
+//     {
+//         lowerBound[mx+my+i] = -max_cv;
+//         upperBound[mx+my+i] = max_cv;
+//         lowerBound[mx+my+i+1] = -max_comega;
+//         upperBound[mx+my+i+1] = max_comega;
+//     }
+
+//     // instantiate the solver
+//     OsqpEigen::Solver solver;
+
+//     // settings
+//     solver.settings()->setVerbosity(false);
+//     solver.settings()->setWarmStart(true);
+//     solver.settings()->setAbsoluteTolerance(1e-6);
+//     solver.settings()->setMaxIteration(30000);
+//     solver.settings()->setRelativeTolerance(1e-6);
+
+//     // set the initial data of the QP solver
+//     solver.data()->setNumberOfVariables(nx);
+//     solver.data()->setNumberOfConstraints(nc);
+//     if(!solver.data()->setHessianMatrix(hessian)) return;
+//     if(!solver.data()->setGradient(gradient)) return;
+//     if(!solver.data()->setLinearConstraintsMatrix(linearMatrix)) return;
+//     if(!solver.data()->setLowerBound(lowerBound)) return;
+//     if(!solver.data()->setUpperBound(upperBound)) return;
+
+//     // instantiate the solver
+//     if(!solver.initSolver()) return;
+
+//     // controller input and QPSolution vector
+//     Eigen::VectorXd QPSolution;
+
+//     // solve the QP problem
+//     if(solver.solveProblem() != OsqpEigen::ErrorExitFlag::NoError) return;
+
+//     // get the controller input
+//     QPSolution = solver.getSolution();
+//     // ROS_INFO("Solution: v0=%f     omega0=%f", QPSolution[dimx], QPSolution[dimx+1]);
+//     for (int i=0 ,j=0; i<dimu; i+=2, j++)
+//     {
+//         output(0, j) = QPSolution[dimx+i];
+//         output(1, j) = QPSolution[dimx+i+1];
+//     }
+// }
+
+// delay time compensate 
 void MPC::solveMPCV(void)
 {
-    const int dimx = 3 * T;
-    const int dimu = 2 * T;
+    const int dimx = 3 * (T - delay_num);
+    const int dimu = 2 * (T - delay_num);
     const int nx = dimx + dimu;
 
     Eigen::SparseMatrix<double> hessian;
@@ -603,7 +837,7 @@ void MPC::solveMPCV(void)
     Eigen::VectorXd upperBound;
 
     // first-order
-    for (int i=0, j=0, k=0; i<dimx; i+=3, j++, k+=2)
+    for (int i=0, j=delay_num, k=0; i<dimx; i+=3, j++, k+=2)
     {
         gradient[i] = -2 * Q[0] * xref(0, j);
         gradient[i+1] = -2 * Q[1] * xref(1, j);
@@ -656,11 +890,11 @@ void MPC::solveMPCV(void)
     }
 
     // equality constraints
-    MPCState temp = now_state;
+    MPCState temp = xbar[delay_num];
     getLinearModel(temp);
     int my = dimx;
     double b[my];
-    const int nnzA = 11 * T - 5;
+    const int nnzA = 11 * (T-delay_num) - 5;
     int irowA[nnzA];
     int jcolA[nnzA];
     double dA[nnzA];
@@ -684,11 +918,11 @@ void MPC::solveMPCV(void)
     irowA[dimx+2] = 2;
     jcolA[dimx+2] = dimx+1;
     dA[dimx+2] = -B(2, 1);
-    int ABidx = 8*T - 8;
+    int ABidx = 8*(T-delay_num) - 8;
     int ABbegin = dimx+3;
     for (int i=0, j=1; i<ABidx; i+=8, j++)
     {
-        getLinearModel(xbar[j]);
+        getLinearModel(xbar[j+delay_num]);
         for (int k=0; k<3; k++)
         {
             b[3*j+k] = C[k];
@@ -718,7 +952,7 @@ void MPC::solveMPCV(void)
     }
 
     // iequality constraints
-    const int mz  = 2 * T - 2;
+    const int mz  = 2 * (T-delay_num) - 2;
     const int nnzC = 2 * dimu - 4;
     int   irowC[nnzC];
     int   jcolC[nnzC];
@@ -812,10 +1046,15 @@ void MPC::solveMPCV(void)
     // get the controller input
     QPSolution = solver.getSolution();
     // ROS_INFO("Solution: v0=%f     omega0=%f", QPSolution[dimx], QPSolution[dimx+1]);
-    for (int i=0; i<dimu; i+=2)
+    for (int i=0; i<delay_num; i++)
     {
-        output(0, i) = QPSolution[dimx+i];
-        output(1, i) = QPSolution[dimx+i+1];
+        output(0, i) = output_buff[i][0];
+        output(1, i) = output_buff[i][1];
+    }
+    for (int i=0, j=0; i<dimu; i+=2, j++)
+    {
+        output(0, j+delay_num) = QPSolution[dimx+i];
+        output(1, j+delay_num) = QPSolution[dimx+i+1];
     }
 }
 
@@ -852,9 +1091,15 @@ void MPC::getCmd(void)
     drawPredictPath(xopt);
     if (control_a)
     {
-        cmd.speed = now_state.v + dt * output(0, 0);
+        cmd.speed = now_state.v + dt * output(0, delay_num);
     }
     else
-        cmd.speed = output(0, 0);
-    cmd.omega = output(1, 0);
+        cmd.speed = output(0, delay_num);
+    cmd.omega = output(1, delay_num);
+    if (delay_num>0)
+    {
+        output_buff.erase(output_buff.begin());
+        output_buff.push_back(Eigen::Vector2d(output(0, delay_num),output(1, delay_num)));
+    }
+    
 }

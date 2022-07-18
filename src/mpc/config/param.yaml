@@ -6,14 +6,15 @@ mpc:
   # max_iter: 3
   max_iter: 150
   # predict_steps: 100
-  predict_steps: 20
+  predict_steps: 30
+  delay_num: 10
   max_omega: 2.4
   max_domega: 1.0
   max_speed: 1.5
   min_speed: -1.5
   max_accel: 0.5
   in_test: true
-  control_a: true
+  control_a: false
   matrix_q: [10.0, 10.0, 2.5, 2.5]
   matrix_r: [0.1, 0.01]
   matrix_rd: [0.01, 0.01]

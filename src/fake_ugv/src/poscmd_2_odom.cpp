@@ -3,6 +3,7 @@
 #include <random>
 #include <eigen3/Eigen/Dense>
 #include <ros/ros.h>
+#include <vector>
 #include <nav_msgs/Odometry.h>
 #include "diablo_sdk/Diablo_Ctrl.h"
 
@@ -11,13 +12,16 @@ using namespace std;
 ros::Subscriber diablo_cmd_sub;
 ros::Publisher  odom_pub;
 ros::Timer simulate_timer;
+ros::Time get_cmdtime;
 
 diablo_sdk::Diablo_Ctrl diablo_cmd;
+vector<diablo_sdk::Diablo_Ctrl> cmd_buff;
 double x=0.0;
 double y=0.0;
 double speed = 0.0;
 double yaw = 0.0;
 double yaw_dot = 0.0;
+double time_delay = 0.0;
 
 double p_init_x, p_init_y, p_init_z;
 double time_resolution = 0.01;
@@ -35,8 +39,22 @@ void initParams()
 
 void rcvVelCmdCallBack(const diablo_sdk::Diablo_CtrlConstPtr cmd)
 {	
-	               rcv_cmd 	  = true;
-	diablo_cmd    = *cmd;
+	if (rcv_cmd==false)
+	{
+		rcv_cmd = true;
+		cmd_buff.push_back(*cmd);
+		get_cmdtime = ros::Time::now();
+	}
+	else
+	{
+		cmd_buff.push_back(*cmd);
+		if ((ros::Time::now()-get_cmdtime).toSec()>time_delay)
+		{
+			diablo_cmd = cmd_buff[0];
+			cmd_buff.erase(cmd_buff.begin());
+		}
+	}
+
     // ROS_INFO("in ODOM, the cmd is: a=%f, steer=%f", cmd.drive.acceleration, cmd.drive.steering_angle);
 }
 
@@ -110,6 +128,7 @@ int main (int argc, char** argv)
 	initParams();
 	nh.getParam("simulator/max_omega", max_omega);
 	nh.getParam("simulator/max_speed", max_speed);
+	nh.getParam("simulator/time_delay", time_delay);
 	  
     diablo_cmd_sub  = nh.subscribe( "command", 1000, rcvVelCmdCallBack );
     odom_pub  = nh.advertise<nav_msgs::Odometry>("odometry", 10);
